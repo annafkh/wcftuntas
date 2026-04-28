@@ -1,0 +1,243 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum UserRole {
+  pt_wcf
+  karyawan
+  pengawas
+}
+
+enum TaskType {
+  harian
+  mingguan
+  bulanan
+}
+
+enum TaskStatus {
+  draft
+  ditugaskan
+  selesai_karyawan
+  menunggu_review_pengawas
+  disetujui_pengawas
+  selesai
+  ditolak_revisi
+}
+
+enum ShiftType {
+  pagi
+  middle
+  siang
+  mingguan
+  bulanan
+}
+
+model User {
+  id                String        @id @default(cuid())
+  name              String
+  username          String        @unique
+  email             String?       @unique
+  password          String
+  mustChangePassword Boolean      @default(true)
+  isActive          Boolean       @default(true)
+  role              UserRole
+  partnerId         String?
+  department        String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  partner           Partner?      @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  assignedTasks     Task[]        @relation("AssignedTasks")
+  createdTasks      Task[]        @relation("CreatedTasks")
+  supervisedTasks   Task[]        @relation("SupervisedTasks")
+  assignedShifts    ShiftSchedule[] @relation("AssignedShifts")
+  attachments       Attachment[]
+  activityLogs      ActivityLog[]
+  notifications     Notification[]
+
+  @@index([role, partnerId, createdAt])
+}
+
+model Partner {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+
+  @@index([createdAt])
+}
+
+model Task {
+  id                   String        @id @default(cuid())
+  areaId               String?
+  title                String
+  description          String?
+  type                 TaskType
+  assignedById         String
+  assignedToId         String
+  shift                ShiftType     @default(pagi)
+  taskTemplateId       String?
+  shiftScheduleId      String?
+  supervisorId         String?
+  dueDate              DateTime
+  taskDate             DateTime
+  status               TaskStatus    @default(ditugaskan)
+  employeeChecklistAt  DateTime?
+  supervisorApprovedAt DateTime?
+  supervisorNote       String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  area                 MasterArea?   @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  assignedBy           User          @relation("CreatedTasks", fields: [assignedById], references: [id])
+  assignedTo           User          @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  taskTemplate         TaskTemplate? @relation(fields: [taskTemplateId], references: [id], onDelete: SetNull)
+  shiftSchedule        ShiftSchedule? @relation(fields: [shiftScheduleId], references: [id], onDelete: SetNull)
+  supervisor           User?         @relation("SupervisedTasks", fields: [supervisorId], references: [id])
+  attachments          Attachment[]
+  activityLogs         ActivityLog[]
+
+  @@index([assignedToId, status])
+  @@index([assignedToId, taskDate, createdAt])
+  @@index([supervisorId, status])
+  @@index([taskDate, status])
+  @@index([status, createdAt])
+  @@index([taskTemplateId])
+  @@index([shiftScheduleId])
+  @@index([shiftScheduleId, createdAt])
+  @@index([areaId])
+  @@index([createdAt])
+}
+
+model TaskTemplate {
+  id              String              @id @default(cuid())
+  areaId          String?
+  title           String
+  description     String
+  type            TaskType
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  area            MasterArea?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  tasks           Task[]
+  shiftAssignments ShiftTaskTemplate[]
+  taskPackages    TaskPackageItem[]
+
+  @@index([areaId])
+  @@index([createdAt, type])
+}
+
+model MasterArea {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tasks     Task[]
+  taskTemplates TaskTemplate[]
+
+  @@index([createdAt])
+}
+
+model TaskPackage {
+  id            String            @id @default(cuid())
+  name          String            @unique
+  description   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  taskTemplates TaskPackageItem[]
+
+  @@index([createdAt])
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  taskId      String
+  fileUrl     String
+  fileName    String
+  fileType    String
+  uploadedById String
+  createdAt   DateTime @default(now())
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy  User     @relation(fields: [uploadedById], references: [id])
+
+  @@index([taskId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  taskId     String
+  actorId    String
+  action     String
+  note       String
+  createdAt  DateTime @default(now())
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor      User     @relation(fields: [actorId], references: [id])
+
+  @@index([taskId, createdAt])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId       String
+  title        String
+  description  String
+  createdAt    DateTime  @default(now())
+  readAt       DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+model ShiftSchedule {
+  id           String    @id @default(cuid())
+  date         DateTime
+  shift        ShiftType
+  employeeId   String
+  note         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  employee     User      @relation("AssignedShifts", fields: [employeeId], references: [id])
+  tasks        Task[]
+  taskTemplates ShiftTaskTemplate[]
+
+  @@index([date, shift])
+  @@index([employeeId, date])
+  @@index([createdAt])
+  @@unique([date, shift, employeeId])
+}
+
+model ShiftTaskTemplate {
+  id              String        @id @default(cuid())
+  shiftScheduleId String
+  taskTemplateId  String
+  createdAt       DateTime      @default(now())
+  shiftSchedule   ShiftSchedule @relation(fields: [shiftScheduleId], references: [id], onDelete: Cascade)
+  taskTemplate    TaskTemplate  @relation(fields: [taskTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftScheduleId, taskTemplateId])
+  @@index([taskTemplateId])
+}
+
+model TaskPackageItem {
+  id             String       @id @default(cuid())
+  taskPackageId  String
+  taskTemplateId String
+  createdAt      DateTime     @default(now())
+  taskPackage    TaskPackage  @relation(fields: [taskPackageId], references: [id], onDelete: Cascade)
+  taskTemplate   TaskTemplate @relation(fields: [taskTemplateId], references: [id], onDelete: Cascade)
+
+  @@unique([taskPackageId, taskTemplateId])
+  @@index([taskTemplateId])
+}

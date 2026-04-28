@@ -1,36 +1,162 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WCF Tuntas
 
-## Getting Started
+Aplikasi web checklist task untuk PT wcf dengan 3 role: `pt_wcf`, `karyawan`, dan `pengawas`. Fitur utama mencakup autentikasi berbasis role, dashboard berbeda per role, task list dengan filter, detail task, upload attachment bukti, approval workflow, riwayat aktivitas, dan kalender interaktif.
 
-First, run the development server:
+Catatan implementasi:
+- UI dan route sudah siap dipakai untuk demo end-to-end.
+- Backend saat ini memakai repository in-memory dengan dummy data agar aplikasi langsung berjalan tanpa setup database.
+- Schema Prisma PostgreSQL sudah disiapkan agar mudah dipindahkan ke database nyata.
+
+## 1. Struktur Folder Project
+
+```text
+app/
+  (protected)/
+    approval/
+    calendar/
+    dashboard/
+    history/
+    tasks/
+      [taskId]/
+      new/
+  api/
+    auth/
+    calendar/
+    dashboard/
+    history/
+    tasks/
+  login/
+components/
+  app-shell.tsx
+  login-form.tsx
+  logout-button.tsx
+  status-badge.tsx
+  task-calendar.tsx
+  task-completion-form.tsx
+  task-create-form.tsx
+  task-review-form.tsx
+lib/
+  auth.ts
+  mock-db.ts
+  rbac.ts
+  types.ts
+  utils.ts
+  validators.ts
+prisma/
+  schema.prisma
+proxy.ts
+```
+
+## 2. Tech Stack
+
+- Frontend: Next.js 16 App Router, React 19, TypeScript
+- Styling: Tailwind CSS 4
+- Backend: Next.js Route Handlers
+- Auth: JWT + HTTP-only cookie
+- Database target: PostgreSQL + Prisma
+- Validation: Zod
+- Calendar: FullCalendar
+
+## 3. Database Schema
+
+Entity utama:
+- `User`
+- `Task`
+- `Attachment`
+- `ActivityLog`
+- `Notification`
+
+Enum utama:
+- `UserRole`: `pt_wcf`, `karyawan`, `pengawas`
+- `TaskType`: `harian`, `mingguan`, `bulanan`
+- `TaskPriority`: `rendah`, `sedang`, `tinggi`, `kritis`
+- `TaskStatus`: `draft`, `ditugaskan`, `selesai_karyawan`, `menunggu_review_pengawas`, `disetujui_pengawas`, `ditolak_revisi`
+
+Schema lengkap ada di [prisma/schema.prisma](/Users/annafifakhruddin/Documents/wcf/wcftuntas/prisma/schema.prisma:1).
+
+## 4. API Endpoint
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/session`
+- `GET /api/dashboard`
+- `GET /api/tasks`
+- `POST /api/tasks`
+- `GET /api/tasks/[taskId]`
+- `PATCH /api/tasks/[taskId]`
+- `POST /api/tasks/[taskId]/complete`
+- `POST /api/tasks/[taskId]/review`
+- `GET /api/calendar`
+- `GET /api/history`
+- `GET /api/blueprint`
+
+## 5. Flow Aplikasi
+
+1. PT wcf login dan membuat task baru.
+2. Task ditugaskan ke karyawan tanpa pengawas tetap.
+3. Karyawan melihat task pada list dan kalender.
+4. Karyawan menyelesaikan task lalu upload attachment/foto bukti.
+5. Status menjadi `Selesai oleh Karyawan`.
+6. Pengawas membuka approval queue.
+7. Pengawas memeriksa detail task dan attachment.
+8. Pengawas wajib mengisi `Keterangan Pengawas`.
+9. Pengawas menyetujui task atau meminta revisi.
+10. Semua perubahan masuk ke activity log dan notification feed.
+
+## 6. Kode Frontend dan Backend Utama
+
+Frontend utama:
+- [app/(protected)/dashboard/page.tsx](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/(protected)/dashboard/page.tsx:1)
+- [app/(protected)/tasks/page.tsx](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/(protected)/tasks/page.tsx:1)
+- [app/(protected)/tasks/[taskId]/page.tsx](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/(protected)/tasks/[taskId]/page.tsx:1)
+- [components/task-completion-form.tsx](/Users/annafifakhruddin/Documents/wcf/wcftuntas/components/task-completion-form.tsx:1)
+- [components/task-review-form.tsx](/Users/annafifakhruddin/Documents/wcf/wcftuntas/components/task-review-form.tsx:1)
+- [components/task-calendar.tsx](/Users/annafifakhruddin/Documents/wcf/wcftuntas/components/task-calendar.tsx:1)
+
+Backend utama:
+- [app/api/tasks/route.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/api/tasks/route.ts:1)
+- [app/api/tasks/[taskId]/complete/route.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/api/tasks/[taskId]/complete/route.ts:1)
+- [app/api/tasks/[taskId]/review/route.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/api/tasks/[taskId]/review/route.ts:1)
+- [app/api/auth/login/route.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/api/auth/login/route.ts:1)
+- [lib/mock-db.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/mock-db.ts:1)
+- [lib/auth.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/auth.ts:1)
+
+## 7. Dummy Data
+
+Dummy akun:
+- PT wcf: `admin@wcf.co.id` / `ptwcf123`
+- Karyawan: `rina@wcf.co.id` / `karyawan123`
+- Pengawas: `mira@wcf.co.id` / `pengawas123`
+
+Dummy task, attachment, activity log, dan notification ada di [lib/mock-db.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/mock-db.ts:1).
+
+## 8. Panduan Menjalankan Project
+
+1. Install dependency:
+
+```bash
+npm install
+```
+
+2. Jalankan development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Buka `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. Login dengan salah satu dummy account di atas.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+5. Jika ingin memakai PostgreSQL sungguhan:
+- buat `.env` dan isi `DATABASE_URL`
+- jalankan `npx prisma migrate dev`
+- ganti repository in-memory di `lib/mock-db.ts` dengan query Prisma service
 
-## Learn More
+## Validasi Bisnis yang Sudah Diimplementasikan
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Karyawan tidak bisa submit selesai tanpa attachment
+- Pengawas tidak bisa approve/revisi tanpa mengisi keterangan
+- Route protected memakai `proxy.ts` dan pemeriksaan session server-side
+- Role tertentu saja yang bisa memakai fitur tertentu
+- Task yang sudah disetujui tidak bisa diubah lagi oleh karyawan

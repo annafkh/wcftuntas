@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins: ["*.ngrok-free.app", "*.ngrok.app"],
+  output: "standalone",
+  turbopack: {
+    root: process.cwd(),
+  },
 };
 
 export default nextConfig;
