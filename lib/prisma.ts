@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config as loadDotenv, parse as parseDotenv } from "dotenv";
-import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "@prisma/client";
 
 function resolveDatabaseUrl() {
@@ -22,7 +21,6 @@ function resolveDatabaseUrl() {
 }
 
 const databaseUrl = resolveDatabaseUrl();
-const parsedDatabaseUrl = databaseUrl ? new URL(databaseUrl) : null;
 
 const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
@@ -46,16 +44,7 @@ export const prisma =
     ? globalForPrisma.prisma
     :
   new PrismaClient({
-    adapter:
-      parsedDatabaseUrl
-        ? new PrismaMariaDb({
-            host: parsedDatabaseUrl.hostname,
-            port: parsedDatabaseUrl.port ? Number(parsedDatabaseUrl.port) : 3306,
-            user: decodeURIComponent(parsedDatabaseUrl.username),
-            password: decodeURIComponent(parsedDatabaseUrl.password),
-            database: parsedDatabaseUrl.pathname.replace(/^\//, ""),
-          })
-        : undefined,
+    datasourceUrl: databaseUrl,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 

@@ -2,15 +2,10 @@
   "name": "wcftuntas",
   "version": "0.1.0",
   "private": true,
-  "engines": {
-    "node": ">=20.9 <23"
-  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
-    "start": "NODE_ENV=production node server.js",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
@@ -19,7 +14,6 @@
     "@fullcalendar/interaction": "^6.1.20",
     "@fullcalendar/react": "^6.1.20",
     "@fullcalendar/timegrid": "^6.1.20",
-    "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-popover": "^1.1.15",
     "@tailwindcss/postcss": "^4.2.2",
@@ -27,7 +21,6 @@
     "clsx": "^2.1.1",
     "jose": "^6.2.2",
     "lucide-react": "^1.8.0",
-    "mariadb": "^3.5.2",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",

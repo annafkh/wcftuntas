@@ -4,8 +4,8 @@ Aplikasi web checklist task untuk PT wcf dengan 3 role: `pt_wcf`, `karyawan`, da
 
 Catatan implementasi:
 - UI dan route sudah siap dipakai untuk demo end-to-end.
-- Backend saat ini memakai Prisma sebagai akses data utama.
-- Schema Prisma sekarang ditargetkan untuk MySQL / MariaDB agar cocok dengan shared hosting cPanel.
+- Backend saat ini memakai repository in-memory dengan dummy data agar aplikasi langsung berjalan tanpa setup database.
+- Schema Prisma PostgreSQL sudah disiapkan agar mudah dipindahkan ke database nyata.
 
 ## 1. Struktur Folder Project
 
@@ -53,7 +53,7 @@ proxy.ts
 - Styling: Tailwind CSS 4
 - Backend: Next.js Route Handlers
 - Auth: JWT + HTTP-only cookie
-- Database target: MySQL / MariaDB + Prisma
+- Database target: PostgreSQL + Prisma
 - Validation: Zod
 - Calendar: FullCalendar
 
@@ -148,10 +148,10 @@ npm run dev
 
 4. Login dengan salah satu dummy account di atas.
 
-5. Jika ingin memakai database sungguhan di shared hosting:
+5. Jika ingin memakai PostgreSQL sungguhan:
 - buat `.env` dan isi `DATABASE_URL`
-- jalankan `npx prisma generate`
-- jalankan `npx prisma db push`
+- jalankan `npx prisma migrate dev`
+- ganti repository in-memory di `lib/mock-db.ts` dengan query Prisma service
 
 ## Validasi Bisnis yang Sudah Diimplementasikan
 
