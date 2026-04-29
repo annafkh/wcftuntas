@@ -2573,43 +2573,44 @@ export async function completeTaskWithStoredAttachments(
   }
 
   try {
-    const task = await prisma.$transaction(async (tx) => {
-      const updated = await tx.task.update({
-        where: { id: taskId },
-        data: {
-          employeeChecklistAt: new Date(),
-          status: "selesai_karyawan",
-          attachments: {
-            createMany: {
-              data: storedAttachments.map((item) => ({
-                fileUrl: item.fileUrl,
-                fileName: item.fileName,
-                fileType: item.fileType,
-                uploadedById: session.userId,
-              })),
-            },
-          },
-        },
-        include: taskInclude,
-      });
+    await prisma.attachment.createMany({
+      data: storedAttachments.map((item) => ({
+        taskId,
+        fileUrl: item.fileUrl,
+        fileName: item.fileName,
+        fileType: item.fileType,
+        uploadedById: session.userId,
+      })),
+    });
 
-      await createTaskAuditLog(tx, {
+    const task = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        employeeChecklistAt: new Date(),
+        status: "selesai_karyawan",
+      },
+      include: taskInclude,
+    });
+
+    await prisma.activityLog.create({
+      data: {
         taskId,
         actorId: session.userId,
         action: "TASK_DISETORKAN",
-        note: `Pelaksana mengirim hasil pekerjaan "${updated.title}" untuk ditinjau.`,
-      });
+        note: `Pelaksana mengirim hasil pekerjaan "${task.title}" untuk ditinjau.`,
+      },
+    });
 
-      await createNotifications(tx, [
-        ...(await getSupervisorUserIds(updated.assignedTo.partnerId, tx)).map((userId) => ({
+    const supervisorUserIds = await getSupervisorUserIds(task.assignedTo.partnerId);
+    if (supervisorUserIds.length > 0) {
+      await prisma.notification.createMany({
+        data: supervisorUserIds.map((userId) => ({
           userId,
           title: "Hasil pekerjaan menunggu peninjauan",
-          description: `Tugas "${updated.title}" telah diselesaikan oleh pelaksana dan siap diperiksa.`,
+          description: `Tugas "${task.title}" telah diselesaikan oleh pelaksana dan siap diperiksa.`,
         })),
-      ]);
-
-      return updated;
-    });
+      });
+    }
 
     return mapTask(task);
   } catch (error) {
