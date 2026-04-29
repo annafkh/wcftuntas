@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { PwaRegister } from "@/components/pwa-register";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import "./globals.css";
@@ -40,6 +41,7 @@ export default function RootLayout({
           <PwaRegister />
           {children}
         </ToastProvider>
+        <Analytics />
       </body>
     </html>
   );
