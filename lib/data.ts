@@ -695,6 +695,11 @@ async function assertUserRole(userId: string, role: UserRole) {
   }
 }
 
+const globalForBootstrap = globalThis as typeof globalThis & {
+  bootstrapReady?: boolean;
+  bootstrapPromise?: Promise<void>;
+};
+
 async function ensureBootstrapUsers() {
   const totalUsers = await prisma.user.count();
   if (totalUsers > 0) {
@@ -745,7 +750,21 @@ async function ensureBootstrapUsers() {
 }
 
 export async function initializeData() {
-  await ensureBootstrapUsers();
+  if (globalForBootstrap.bootstrapReady) {
+    return;
+  }
+
+  if (!globalForBootstrap.bootstrapPromise) {
+    globalForBootstrap.bootstrapPromise = ensureBootstrapUsers()
+      .then(() => {
+        globalForBootstrap.bootstrapReady = true;
+      })
+      .finally(() => {
+        globalForBootstrap.bootstrapPromise = undefined;
+      });
+  }
+
+  await globalForBootstrap.bootstrapPromise;
 }
 
 export async function listTaskTemplates() {

@@ -9,18 +9,18 @@ function resolveDatabaseUrl() {
   try {
     const envFile = fs.readFileSync(envPath, "utf8");
     const parsed = parseDotenv(envFile);
-    if (parsed.DIRECT_URL) {
-      return parsed.DIRECT_URL;
-    }
     if (parsed.DATABASE_URL) {
       return parsed.DATABASE_URL;
+    }
+    if (parsed.DIRECT_URL) {
+      return parsed.DIRECT_URL;
     }
   } catch {
     // Fallback to process.env when .env is unavailable.
   }
 
   loadDotenv({ path: envPath, override: false });
-  return process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+  return process.env.DATABASE_URL ?? process.env.DIRECT_URL;
 }
 
 const databaseUrl = resolveDatabaseUrl();
