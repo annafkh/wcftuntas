@@ -9,6 +9,9 @@ function resolveDatabaseUrl() {
   try {
     const envFile = fs.readFileSync(envPath, "utf8");
     const parsed = parseDotenv(envFile);
+    if (parsed.DIRECT_URL) {
+      return parsed.DIRECT_URL;
+    }
     if (parsed.DATABASE_URL) {
       return parsed.DATABASE_URL;
     }
@@ -17,7 +20,7 @@ function resolveDatabaseUrl() {
   }
 
   loadDotenv({ path: envPath, override: false });
-  return process.env.DATABASE_URL;
+  return process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 }
 
 const databaseUrl = resolveDatabaseUrl();

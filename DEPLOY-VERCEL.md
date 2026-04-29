@@ -50,6 +50,23 @@ Build settings default sudah cukup:
 
 `postinstall` sudah menjalankan `prisma generate`, jadi Prisma client akan ikut siap saat build.
 
+### 3a. Environment variables yang diisi di Vercel
+
+Copy dari [.env.vercel.example](/Users/annafifakhruddin/Documents/wcf/wcftuntas/.env.vercel.example:1), lalu isi nilai sebenarnya di dashboard Vercel.
+
+Untuk Supabase:
+- `DATABASE_URL` gunakan endpoint pooler port `6543`
+- `DIRECT_URL` gunakan endpoint direct port `5432`
+
+Contoh:
+
+```env
+DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@AWS-REGION.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require
+DIRECT_URL=postgresql://postgres.PROJECT_REF:PASSWORD@AWS-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+AUTH_SECRET=secret-random-panjang
+BLOB_READ_WRITE_TOKEN=...
+```
+
 ### 4. Jalankan migration database
 
 Saran paling aman: jalankan migration dari lokal atau CI, bukan dari runtime Vercel.
