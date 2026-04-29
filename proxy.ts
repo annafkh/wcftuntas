@@ -31,6 +31,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const user = session ? await findUserById(session.userId) : null;
+  const mustChangePassword = Boolean(session?.mustChangePassword);
 
   if (!user && isProtected) {
     const response = NextResponse.redirect(new URL("/login", request.url));
@@ -38,13 +39,13 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  if (user?.mustChangePassword && pathname !== passwordResetPath) {
+  if (mustChangePassword && pathname !== passwordResetPath) {
     return NextResponse.redirect(new URL(passwordResetPath, request.url));
   }
 
   if (session && pathname === "/login") {
     return NextResponse.redirect(
-      new URL(user?.mustChangePassword ? passwordResetPath : getDefaultRoute(user?.role ?? session.role), request.url),
+      new URL(mustChangePassword ? passwordResetPath : getDefaultRoute(user?.role ?? session.role), request.url),
     );
   }
 
