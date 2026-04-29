@@ -521,9 +521,19 @@ async function createTaskAuditLog(tx: Prisma.TransactionClient, input: {
   action: string;
   note: string;
 }) {
-  await tx.activityLog.create({
-    data: input,
-  });
+  try {
+    await tx.activityLog.create({
+      data: input,
+    });
+  } catch (error) {
+    if (!shouldRetryTransactionSideEffect(error)) {
+      throw error;
+    }
+
+    await prisma.activityLog.create({
+      data: input,
+    });
+  }
 }
 
 async function createNotifications(tx: Prisma.TransactionClient, notifications: Array<{
@@ -535,9 +545,27 @@ async function createNotifications(tx: Prisma.TransactionClient, notifications: 
     return;
   }
 
-  await tx.notification.createMany({
-    data: notifications,
-  });
+  try {
+    await tx.notification.createMany({
+      data: notifications,
+    });
+  } catch (error) {
+    if (!shouldRetryTransactionSideEffect(error)) {
+      throw error;
+    }
+
+    await prisma.notification.createMany({
+      data: notifications,
+    });
+  }
+}
+
+function shouldRetryTransactionSideEffect(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === "P2028";
+  }
+
+  return error instanceof Error && error.message.includes("Transaction not found");
 }
 
 async function assertTaskTemplatesExist(
