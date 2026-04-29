@@ -657,6 +657,74 @@ async function createTasksFromTemplates(
   }
 }
 
+function buildShiftTaskCreateInputs(input: {
+  taskTemplates: PrismaTaskTemplate[];
+  assignedById: string;
+  assignedToId: string;
+  shift: ShiftType;
+  date: string;
+}) {
+  const taskDate = startOfDay(input.date);
+  const dueDate = endOfShiftDay(input.date);
+
+  return input.taskTemplates.map((taskTemplate) => ({
+    areaId: taskTemplate.areaId ?? null,
+    title: taskTemplate.title,
+    description: taskTemplate.description,
+    type: taskTemplate.type,
+    assignedById: input.assignedById,
+    assignedToId: input.assignedToId,
+    shift: input.shift,
+    taskTemplateId: taskTemplate.id,
+    taskDate,
+    dueDate,
+    status: "ditugaskan" as const,
+  }));
+}
+
+async function createShiftTaskSideEffects(input: {
+  shiftScheduleId: string;
+  assignedById: string;
+  assignedToId: string;
+  shift: ShiftType;
+}) {
+  const createdTasks = await prisma.task.findMany({
+    where: {
+      shiftScheduleId: input.shiftScheduleId,
+      assignedById: input.assignedById,
+      assignedToId: input.assignedToId,
+      shift: input.shift,
+    },
+    select: {
+      id: true,
+      title: true,
+      assignedToId: true,
+    },
+    orderBy: [{ createdAt: "asc" }, { title: "asc" }],
+  });
+
+  if (createdTasks.length === 0) {
+    return;
+  }
+
+  await prisma.activityLog.createMany({
+    data: createdTasks.map((task) => ({
+      taskId: task.id,
+      actorId: input.assignedById,
+      action: "TASK_DIBUAT_DARI_MASTER",
+      note: `Task "${task.title}" dibuat dari master task untuk shift ${SHIFT_LABELS[input.shift]}.`,
+    })),
+  });
+
+  await prisma.notification.createMany({
+    data: createdTasks.map((task) => ({
+      userId: task.assignedToId,
+      title: "Tugas shift baru diterima",
+      description: `Anda menerima penugasan "${task.title}" dari master shift.`,
+    })),
+  });
+}
+
 function canMutateGeneratedTask(task: PrismaTask & { attachments?: PrismaAttachment[] }) {
   return (
     task.status === "ditugaskan" &&
@@ -1543,39 +1611,45 @@ export async function createShiftSchedule(
 ) {
   await assertUserRole(input.employeeId, "karyawan");
   const taskTemplates = await assertTaskTemplatesExist(input.taskTemplateIds ?? []);
+  const createdTasks = buildShiftTaskCreateInputs({
+    taskTemplates,
+    assignedById: session.userId,
+    assignedToId: input.employeeId,
+    shift: input.shift,
+    date: input.date,
+  });
 
   try {
-    const schedule = await prisma.$transaction(async (tx) => {
-      const created = await tx.shiftSchedule.create({
-        data: {
-          date: startOfDay(input.date),
-          shift: input.shift,
-          employeeId: input.employeeId,
-          note: input.note?.trim() || null,
-          taskTemplates: taskTemplates.length
-            ? {
-                create: taskTemplates.map((taskTemplate) => ({
-                  taskTemplateId: taskTemplate.id,
-                })),
-              }
-            : undefined,
-        },
-        include: shiftInclude,
-      });
-
-      await createTasksFromTemplates(tx, {
-        taskTemplates,
-        assignedById: session.userId,
-        assignedToId: input.employeeId,
+    const schedule = await prisma.shiftSchedule.create({
+      data: {
+        date: startOfDay(input.date),
         shift: input.shift,
-        date: input.date,
-        shiftScheduleId: created.id,
-      });
-
-      return created;
+        employeeId: input.employeeId,
+        note: input.note?.trim() || null,
+        taskTemplates: taskTemplates.length
+          ? {
+              create: taskTemplates.map((taskTemplate) => ({
+                taskTemplateId: taskTemplate.id,
+              })),
+            }
+          : undefined,
+        tasks: createdTasks.length
+          ? {
+              create: createdTasks,
+            }
+          : undefined,
+      },
+      include: shiftInclude,
     });
 
-    return schedule ? mapShift(schedule) : null;
+    await createShiftTaskSideEffects({
+      shiftScheduleId: schedule.id,
+      assignedById: session.userId,
+      assignedToId: input.employeeId,
+      shift: input.shift,
+    });
+
+    return mapShift(schedule);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       throw new Error("Jadwal untuk karyawan dan shift tersebut sudah ada.");
@@ -1599,63 +1673,71 @@ export async function createShiftSchedules(
     throw new Error("Pilih minimal satu karyawan.");
   }
   const taskTemplates = await assertTaskTemplatesExist(input.taskTemplateIds ?? []);
+  for (const employeeId of employeeIds) {
+    await assertUserRole(employeeId, "karyawan");
+  }
 
-  return prisma.$transaction(async (tx) => {
-    for (const employeeId of employeeIds) {
-      await assertUserRole(employeeId, "karyawan");
-    }
+  const date = startOfDay(input.date);
+  const existing = await prisma.shiftSchedule.findMany({
+    where: {
+      date,
+      shift: input.shift,
+      employeeId: {
+        in: employeeIds,
+      },
+    },
+    include: shiftInclude,
+  });
 
-    const date = startOfDay(input.date);
-    const existing = await tx.shiftSchedule.findMany({
-      where: {
+  if (existing.length > 0) {
+    const names = existing.map((item) => item.employee.name).join(", ");
+    throw new Error(`Jadwal untuk shift ini sudah ada: ${names}.`);
+  }
+
+  const createdSchedules = [];
+
+  for (const employeeId of employeeIds) {
+    const createdTasks = buildShiftTaskCreateInputs({
+      taskTemplates,
+      assignedById: session.userId,
+      assignedToId: employeeId,
+      shift: input.shift,
+      date: input.date,
+    });
+
+    const schedule = await prisma.shiftSchedule.create({
+      data: {
         date,
         shift: input.shift,
-        employeeId: {
-          in: employeeIds,
-        },
+        employeeId,
+        note: input.note?.trim() || null,
+        taskTemplates: taskTemplates.length
+          ? {
+              create: taskTemplates.map((taskTemplate) => ({
+                taskTemplateId: taskTemplate.id,
+              })),
+            }
+          : undefined,
+        tasks: createdTasks.length
+          ? {
+              create: createdTasks,
+            }
+          : undefined,
       },
       include: shiftInclude,
     });
 
-    if (existing.length > 0) {
-      const names = existing.map((item) => item.employee.name).join(", ");
-      throw new Error(`Jadwal untuk shift ini sudah ada: ${names}.`);
-    }
+    await createShiftTaskSideEffects({
+      shiftScheduleId: schedule.id,
+      assignedById: session.userId,
+      assignedToId: employeeId,
+      shift: input.shift,
+    });
 
-    const createdSchedules = [];
+    createdSchedules.push(schedule);
+  }
 
-    for (const employeeId of employeeIds) {
-      const schedule = await tx.shiftSchedule.create({
-        data: {
-          date,
-          shift: input.shift,
-          employeeId,
-          note: input.note?.trim() || null,
-          taskTemplates: taskTemplates.length
-            ? {
-                create: taskTemplates.map((taskTemplate) => ({
-                  taskTemplateId: taskTemplate.id,
-                })),
-              }
-            : undefined,
-        },
-        include: shiftInclude,
-      });
-
-      await createTasksFromTemplates(tx, {
-        taskTemplates,
-        assignedById: session.userId,
-        assignedToId: employeeId,
-        shift: input.shift,
-        date: input.date,
-        shiftScheduleId: schedule.id,
-      });
-
-      createdSchedules.push(schedule);
-    }
-
-    return createdSchedules.map(mapShift);
-  });
+  return createdSchedules.map(mapShift);
 }
 
 export async function updateShiftSchedule(
