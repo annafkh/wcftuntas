@@ -663,7 +663,6 @@ function buildShiftTaskCreateInputs(input: {
   assignedToId: string;
   shift: ShiftType;
   date: string;
-  shiftScheduleId?: string;
 }) {
   const taskDate = startOfDay(input.date);
   const dueDate = endOfShiftDay(input.date);
@@ -677,10 +676,23 @@ function buildShiftTaskCreateInputs(input: {
     assignedToId: input.assignedToId,
     shift: input.shift,
     taskTemplateId: taskTemplate.id,
-    shiftScheduleId: input.shiftScheduleId ?? null,
     taskDate,
     dueDate,
     status: "ditugaskan" as const,
+  }));
+}
+
+function buildShiftTaskCreateManyInputs(input: {
+  taskTemplates: PrismaTaskTemplate[];
+  assignedById: string;
+  assignedToId: string;
+  shift: ShiftType;
+  date: string;
+  shiftScheduleId: string;
+}) {
+  return buildShiftTaskCreateInputs(input).map((task) => ({
+    ...task,
+    shiftScheduleId: input.shiftScheduleId,
   }));
 }
 
@@ -1856,7 +1868,7 @@ export async function updateShiftSchedule(
       });
 
       await prisma.task.createMany({
-        data: buildShiftTaskCreateInputs({
+        data: buildShiftTaskCreateManyInputs({
           taskTemplates: addedTaskTemplates,
           assignedById: session.userId,
           assignedToId: nextEmployeeId,
