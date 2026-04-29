@@ -663,6 +663,7 @@ function buildShiftTaskCreateInputs(input: {
   assignedToId: string;
   shift: ShiftType;
   date: string;
+  shiftScheduleId?: string;
 }) {
   const taskDate = startOfDay(input.date);
   const dueDate = endOfShiftDay(input.date);
@@ -676,6 +677,7 @@ function buildShiftTaskCreateInputs(input: {
     assignedToId: input.assignedToId,
     shift: input.shift,
     taskTemplateId: taskTemplate.id,
+    shiftScheduleId: input.shiftScheduleId ?? null,
     taskDate,
     dueDate,
     status: "ditugaskan" as const,
@@ -687,6 +689,7 @@ async function createShiftTaskSideEffects(input: {
   assignedById: string;
   assignedToId: string;
   shift: ShiftType;
+  taskTemplateIds?: string[];
 }) {
   const createdTasks = await prisma.task.findMany({
     where: {
@@ -694,6 +697,13 @@ async function createShiftTaskSideEffects(input: {
       assignedById: input.assignedById,
       assignedToId: input.assignedToId,
       shift: input.shift,
+      ...(input.taskTemplateIds?.length
+        ? {
+            taskTemplateId: {
+              in: input.taskTemplateIds,
+            },
+          }
+        : {}),
     },
     select: {
       id: true,
@@ -1756,133 +1766,145 @@ export async function updateShiftSchedule(
   }
 
   try {
-    const schedule = await prisma.$transaction(async (tx) => {
-      const existing = await tx.shiftSchedule.findUnique({
-        where: { id: shiftId },
-        include: {
-          taskTemplates: {
-            include: {
-              taskTemplate: true,
-            },
+    const existing = await prisma.shiftSchedule.findUnique({
+      where: { id: shiftId },
+      include: {
+        taskTemplates: {
+          include: {
+            taskTemplate: true,
           },
-          tasks: {
-            include: {
-              attachments: true,
-            },
+        },
+        tasks: {
+          include: {
+            attachments: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      return null;
+    }
+
+    const nextTaskTemplateIds =
+      input.taskTemplateIds !== undefined
+        ? [...new Set(input.taskTemplateIds)]
+        : existing.taskTemplates.map((item) => item.taskTemplateId);
+    const nextTaskTemplates = await assertTaskTemplatesExist(nextTaskTemplateIds);
+
+    const nextEmployeeId = input.employeeId ?? existing.employeeId;
+    const nextShift = input.shift ?? existing.shift;
+    const nextDate = input.date ?? existing.date.toISOString().slice(0, 10);
+
+    const lockedTasks = existing.tasks.filter((task) => !canMutateGeneratedTask(task));
+    const hasStructuralChange =
+      input.employeeId !== undefined || input.shift !== undefined || input.date !== undefined;
+
+    if (lockedTasks.length > 0 && hasStructuralChange) {
+      throw new Error("Jadwal tidak bisa diubah karena ada task turunan yang sudah diproses.");
+    }
+
+    const removedTaskTemplateIds = existing.taskTemplates
+      .map((item) => item.taskTemplateId)
+      .filter((taskTemplateId) => !nextTaskTemplateIds.includes(taskTemplateId));
+
+    const blockedRemovedTasks = existing.tasks.filter(
+      (task) =>
+        task.taskTemplateId &&
+        removedTaskTemplateIds.includes(task.taskTemplateId) &&
+        !canMutateGeneratedTask(task),
+    );
+
+    if (blockedRemovedTasks.length > 0) {
+      throw new Error("Beberapa master task tidak bisa dilepas karena task turunannya sudah diproses.");
+    }
+
+    if (removedTaskTemplateIds.length > 0) {
+      await prisma.task.deleteMany({
+        where: {
+          shiftScheduleId: shiftId,
+          taskTemplateId: {
+            in: removedTaskTemplateIds,
+          },
+          status: {
+            in: ["draft", "ditugaskan"],
           },
         },
       });
 
-      if (!existing) {
-        return null;
-      }
-
-      const nextTaskTemplateIds =
-        input.taskTemplateIds !== undefined
-          ? [...new Set(input.taskTemplateIds)]
-          : existing.taskTemplates.map((item) => item.taskTemplateId);
-      const nextTaskTemplates = await assertTaskTemplatesExist(nextTaskTemplateIds, tx);
-
-      const nextEmployeeId = input.employeeId ?? existing.employeeId;
-      const nextShift = input.shift ?? existing.shift;
-      const nextDate = input.date ?? existing.date.toISOString().slice(0, 10);
-
-      const lockedTasks = existing.tasks.filter((task) => !canMutateGeneratedTask(task));
-      const hasStructuralChange =
-        input.employeeId !== undefined || input.shift !== undefined || input.date !== undefined;
-
-      if (lockedTasks.length > 0 && hasStructuralChange) {
-        throw new Error("Jadwal tidak bisa diubah karena ada task turunan yang sudah diproses.");
-      }
-
-      const removedTaskTemplateIds = existing.taskTemplates
-        .map((item) => item.taskTemplateId)
-        .filter((taskTemplateId) => !nextTaskTemplateIds.includes(taskTemplateId));
-
-      const blockedRemovedTasks = existing.tasks.filter(
-        (task) =>
-          task.taskTemplateId &&
-          removedTaskTemplateIds.includes(task.taskTemplateId) &&
-          !canMutateGeneratedTask(task),
-      );
-
-      if (blockedRemovedTasks.length > 0) {
-        throw new Error("Beberapa master task tidak bisa dilepas karena task turunannya sudah diproses.");
-      }
-
-      if (removedTaskTemplateIds.length > 0) {
-        await tx.task.deleteMany({
-          where: {
-            shiftScheduleId: shiftId,
-            taskTemplateId: {
-              in: removedTaskTemplateIds,
-            },
-            status: {
-              in: ["draft", "ditugaskan"],
-            },
+      await prisma.shiftTaskTemplate.deleteMany({
+        where: {
+          shiftScheduleId: shiftId,
+          taskTemplateId: {
+            in: removedTaskTemplateIds,
           },
-        });
+        },
+      });
+    }
 
-        await tx.shiftTaskTemplate.deleteMany({
-          where: {
-            shiftScheduleId: shiftId,
-            taskTemplateId: {
-              in: removedTaskTemplateIds,
-            },
-          },
-        });
-      }
+    const existingTaskTemplateIds = existing.taskTemplates.map((item) => item.taskTemplateId);
+    const addedTaskTemplates = nextTaskTemplates.filter(
+      (taskTemplate) => !existingTaskTemplateIds.includes(taskTemplate.id),
+    );
 
-      const existingTaskTemplateIds = existing.taskTemplates.map((item) => item.taskTemplateId);
-      const addedTaskTemplates = nextTaskTemplates.filter(
-        (taskTemplate) => !existingTaskTemplateIds.includes(taskTemplate.id),
-      );
+    if (addedTaskTemplates.length > 0) {
+      await prisma.shiftTaskTemplate.createMany({
+        data: addedTaskTemplates.map((taskTemplate) => ({
+          shiftScheduleId: shiftId,
+          taskTemplateId: taskTemplate.id,
+        })),
+      });
 
-      if (addedTaskTemplates.length > 0) {
-        await tx.shiftTaskTemplate.createMany({
-          data: addedTaskTemplates.map((taskTemplate) => ({
-            shiftScheduleId: shiftId,
-            taskTemplateId: taskTemplate.id,
-          })),
-        });
-
-        await createTasksFromTemplates(tx, {
+      await prisma.task.createMany({
+        data: buildShiftTaskCreateInputs({
           taskTemplates: addedTaskTemplates,
           assignedById: session.userId,
           assignedToId: nextEmployeeId,
           shift: nextShift,
           date: nextDate,
           shiftScheduleId: shiftId,
-        });
-      }
-
-      if (hasStructuralChange) {
-        await tx.task.updateMany({
-          where: {
-            shiftScheduleId: shiftId,
-            status: {
-              in: ["draft", "ditugaskan"],
-            },
-          },
-          data: {
-            assignedToId: nextEmployeeId,
-            shift: nextShift,
-            taskDate: startOfDay(nextDate),
-            dueDate: endOfShiftDay(nextDate),
-          },
-        });
-      }
-
-      return tx.shiftSchedule.update({
-        where: { id: shiftId },
-        data: {
-          ...(input.date ? { date: startOfDay(input.date) } : {}),
-          ...(input.shift ? { shift: input.shift } : {}),
-          ...(input.employeeId ? { employeeId: input.employeeId } : {}),
-          ...(input.note !== undefined ? { note: input.note.trim() || null } : {}),
-        },
-        include: shiftInclude,
+        }),
       });
+
+      await createShiftTaskSideEffects({
+        shiftScheduleId: shiftId,
+        assignedById: session.userId,
+        assignedToId: nextEmployeeId,
+        shift: nextShift,
+        taskTemplateIds: addedTaskTemplates.map((taskTemplate) => taskTemplate.id),
+      });
+    }
+
+    if (hasStructuralChange) {
+      await prisma.task.updateMany({
+        where: {
+          shiftScheduleId: shiftId,
+          status: {
+            in: ["draft", "ditugaskan"],
+          },
+        },
+        data: {
+          assignedToId: nextEmployeeId,
+          shift: nextShift,
+          taskDate: startOfDay(nextDate),
+          dueDate: endOfShiftDay(nextDate),
+        },
+      });
+    }
+
+    await prisma.shiftSchedule.update({
+      where: { id: shiftId },
+      data: {
+        ...(input.date ? { date: startOfDay(input.date) } : {}),
+        ...(input.shift ? { shift: input.shift } : {}),
+        ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+        ...(input.note !== undefined ? { note: input.note.trim() || null } : {}),
+      },
+    });
+
+    const schedule = await prisma.shiftSchedule.findUnique({
+      where: { id: shiftId },
+      include: shiftInclude,
     });
 
     return schedule ? mapShift(schedule) : null;
@@ -1953,174 +1975,184 @@ export async function takeOverShiftTasks(
     await assertUserRole(assigneeId, "karyawan");
   }
 
-  return prisma.$transaction(async (tx) => {
-    const sourceSchedule = await tx.shiftSchedule.findUnique({
-      where: { id: shiftId },
-      include: {
-        employee: true,
-        tasks: {
-          include: {
-            attachments: true,
-          },
-          orderBy: [{ createdAt: "asc" }, { title: "asc" }],
-        },
-      },
-    });
-
-    if (!sourceSchedule) {
-      return null;
-    }
-
-    if (assigneeIds.includes(sourceSchedule.employeeId)) {
-      throw new Error("Karyawan yang tidak masuk tidak bisa menjadi penerima take over.");
-    }
-
-    const existingTargetSchedules = await tx.shiftSchedule.findMany({
-      where: {
-        date: sourceSchedule.date,
-        employeeId: {
-          in: assigneeIds,
-        },
-        shift: sourceSchedule.shift,
-      },
-      include: {
-        employee: true,
-      },
-    });
-
-    const blockedTasks = sourceSchedule.tasks.filter((task) => !canMutateGeneratedTask(task));
-    if (blockedTasks.length > 0) {
-      throw new Error("Take over hanya bisa dilakukan untuk task aktif yang belum diproses.");
-    }
-
-    if (sourceSchedule.tasks.length === 0) {
-      throw new Error("Tidak ada task aktif yang bisa dipindahkan dari jadwal ini.");
-    }
-
-    const targetByEmployeeId = new Map(
-      existingTargetSchedules.map((schedule) => [schedule.employeeId, schedule]),
-    );
-
-    for (const assigneeId of assigneeIds) {
-      if (targetByEmployeeId.has(assigneeId)) {
-        continue;
-      }
-
-      const createdSchedule = await tx.shiftSchedule.create({
-        data: {
-          date: sourceSchedule.date,
-          shift: sourceSchedule.shift,
-          employeeId: assigneeId,
-          note: `Jadwal ${SHIFT_LABELS[sourceSchedule.shift]} dibuat otomatis dari take over ${sourceSchedule.employee.name}.`,
-        },
+  const sourceSchedule = await prisma.shiftSchedule.findUnique({
+    where: { id: shiftId },
+    include: {
+      employee: true,
+      tasks: {
         include: {
-          employee: true,
+          attachments: true,
         },
-      });
+        orderBy: [{ createdAt: "asc" }, { title: "asc" }],
+      },
+    },
+  });
 
-      targetByEmployeeId.set(assigneeId, createdSchedule);
+  if (!sourceSchedule) {
+    return null;
+  }
+
+  if (assigneeIds.includes(sourceSchedule.employeeId)) {
+    throw new Error("Karyawan yang tidak masuk tidak bisa menjadi penerima take over.");
+  }
+
+  const existingTargetSchedules = await prisma.shiftSchedule.findMany({
+    where: {
+      date: sourceSchedule.date,
+      employeeId: {
+        in: assigneeIds,
+      },
+      shift: sourceSchedule.shift,
+    },
+    include: {
+      employee: true,
+    },
+  });
+
+  const blockedTasks = sourceSchedule.tasks.filter((task) => !canMutateGeneratedTask(task));
+  if (blockedTasks.length > 0) {
+    throw new Error("Take over hanya bisa dilakukan untuk task aktif yang belum diproses.");
+  }
+
+  if (sourceSchedule.tasks.length === 0) {
+    throw new Error("Tidak ada task aktif yang bisa dipindahkan dari jadwal ini.");
+  }
+
+  const targetByEmployeeId = new Map(
+    existingTargetSchedules.map((schedule) => [schedule.employeeId, schedule]),
+  );
+
+  for (const assigneeId of assigneeIds) {
+    if (targetByEmployeeId.has(assigneeId)) {
+      continue;
     }
 
-    for (const [index, task] of sourceSchedule.tasks.entries()) {
-      const assigneeId = assigneeIds[index % assigneeIds.length];
-      const targetSchedule = targetByEmployeeId.get(assigneeId);
+    const createdSchedule = await prisma.shiftSchedule.create({
+      data: {
+        date: sourceSchedule.date,
+        shift: sourceSchedule.shift,
+        employeeId: assigneeId,
+        note: `Jadwal ${SHIFT_LABELS[sourceSchedule.shift]} dibuat otomatis dari take over ${sourceSchedule.employee.name}.`,
+      },
+      include: {
+        employee: true,
+      },
+    });
 
-      if (!targetSchedule) {
-        throw new Error("Jadwal karyawan pengganti tidak ditemukan.");
-      }
+    targetByEmployeeId.set(assigneeId, createdSchedule);
+  }
 
-      await tx.task.update({
-        where: { id: task.id },
-        data: {
-          assignedToId: assigneeId,
-          shiftScheduleId: targetSchedule.id,
-        },
-      });
+  const auditLogs: Array<{
+    taskId: string;
+    actorId: string;
+    action: string;
+    note: string;
+  }> = [];
 
-      if (task.taskTemplateId) {
-        await tx.shiftTaskTemplate.upsert({
-          where: {
-            shiftScheduleId_taskTemplateId: {
-              shiftScheduleId: targetSchedule.id,
-              taskTemplateId: task.taskTemplateId,
-            },
-          },
-          update: {},
-          create: {
+  for (const [index, task] of sourceSchedule.tasks.entries()) {
+    const assigneeId = assigneeIds[index % assigneeIds.length];
+    const targetSchedule = targetByEmployeeId.get(assigneeId);
+
+    if (!targetSchedule) {
+      throw new Error("Jadwal karyawan pengganti tidak ditemukan.");
+    }
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: {
+        assignedToId: assigneeId,
+        shiftScheduleId: targetSchedule.id,
+      },
+    });
+
+    if (task.taskTemplateId) {
+      await prisma.shiftTaskTemplate.upsert({
+        where: {
+          shiftScheduleId_taskTemplateId: {
             shiftScheduleId: targetSchedule.id,
             taskTemplateId: task.taskTemplateId,
           },
-        });
-      }
-
-      await createTaskAuditLog(tx, {
-        taskId: task.id,
-        actorId: session.userId,
-        action: "TASK_TAKE_OVER",
-        note: `Task "${task.title}" dipindahkan dari ${sourceSchedule.employee.name} ke ${targetSchedule.employee.name} melalui take over shift ${SHIFT_LABELS[sourceSchedule.shift]}.`,
-      });
-    }
-
-    const movedTemplateIds = sourceSchedule.tasks
-      .map((task) => task.taskTemplateId)
-      .filter((taskTemplateId): taskTemplateId is string => Boolean(taskTemplateId));
-
-    if (movedTemplateIds.length > 0) {
-      await tx.shiftTaskTemplate.deleteMany({
-        where: {
-          shiftScheduleId: shiftId,
-          taskTemplateId: {
-            in: [...new Set(movedTemplateIds)],
-          },
+        },
+        update: {},
+        create: {
+          shiftScheduleId: targetSchedule.id,
+          taskTemplateId: task.taskTemplateId,
         },
       });
     }
 
-    await createNotifications(
-      tx,
-      sourceSchedule.tasks.map((task, index) => {
-        const assigneeId = assigneeIds[index % assigneeIds.length];
-
-        return {
-          userId: assigneeId,
-          title: "Task take over diterima",
-          description: `Anda menerima take over task "${task.title}" dari ${sourceSchedule.employee.name}.`,
-        };
-      }),
-    );
-
-    const targetSchedules = [...targetByEmployeeId.values()];
-
-    const targetNames = assigneeIds
-      .map((assigneeId) => targetByEmployeeId.get(assigneeId)?.employee.name)
-      .filter((name): name is string => Boolean(name));
-    const takeOverNote = `Take over ${sourceSchedule.tasks.length} task ke ${targetNames.join(", ")}.`;
-    const updatedNote = [sourceSchedule.note, takeOverNote]
-      .filter(Boolean)
-      .join(" | ")
-      .slice(0, 300);
-    await tx.shiftSchedule.update({
-      where: { id: shiftId },
-      data: {
-        note: updatedNote || null,
-      },
+    auditLogs.push({
+      taskId: task.id,
+      actorId: session.userId,
+      action: "TASK_TAKE_OVER",
+      note: `Task "${task.title}" dipindahkan dari ${sourceSchedule.employee.name} ke ${targetSchedule.employee.name} melalui take over shift ${SHIFT_LABELS[sourceSchedule.shift]}.`,
     });
-    const changedSchedules = await tx.shiftSchedule.findMany({
+  }
+
+  const movedTemplateIds = sourceSchedule.tasks
+    .map((task) => task.taskTemplateId)
+    .filter((taskTemplateId): taskTemplateId is string => Boolean(taskTemplateId));
+
+  if (movedTemplateIds.length > 0) {
+    await prisma.shiftTaskTemplate.deleteMany({
       where: {
-        id: {
-          in: [shiftId, ...targetSchedules.map((schedule) => schedule.id)],
+        shiftScheduleId: shiftId,
+        taskTemplateId: {
+          in: [...new Set(movedTemplateIds)],
         },
       },
-      include: shiftInclude,
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }, { shift: "asc" }],
     });
+  }
 
-    return {
-      schedules: changedSchedules.map(mapShift),
-      movedTasks: sourceSchedule.tasks.length,
-      assignees: targetNames,
-    };
+  if (auditLogs.length > 0) {
+    await prisma.activityLog.createMany({
+      data: auditLogs,
+    });
+  }
+
+  await prisma.notification.createMany({
+    data: sourceSchedule.tasks.map((task, index) => {
+      const assigneeId = assigneeIds[index % assigneeIds.length];
+
+      return {
+        userId: assigneeId,
+        title: "Task take over diterima",
+        description: `Anda menerima take over task "${task.title}" dari ${sourceSchedule.employee.name}.`,
+      };
+    }),
   });
+
+  const targetSchedules = [...targetByEmployeeId.values()];
+
+  const targetNames = assigneeIds
+    .map((assigneeId) => targetByEmployeeId.get(assigneeId)?.employee.name)
+    .filter((name): name is string => Boolean(name));
+  const takeOverNote = `Take over ${sourceSchedule.tasks.length} task ke ${targetNames.join(", ")}.`;
+  const updatedNote = [sourceSchedule.note, takeOverNote]
+    .filter(Boolean)
+    .join(" | ")
+    .slice(0, 300);
+  await prisma.shiftSchedule.update({
+    where: { id: shiftId },
+    data: {
+      note: updatedNote || null,
+    },
+  });
+  const changedSchedules = await prisma.shiftSchedule.findMany({
+    where: {
+      id: {
+        in: [shiftId, ...targetSchedules.map((schedule) => schedule.id)],
+      },
+    },
+    include: shiftInclude,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }, { shift: "asc" }],
+  });
+
+  return {
+    schedules: changedSchedules.map(mapShift),
+    movedTasks: sourceSchedule.tasks.length,
+    assignees: targetNames,
+  };
 }
 
 export async function getShiftCalendarEvents(session: SessionPayload) {
