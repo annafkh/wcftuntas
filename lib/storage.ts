@@ -1,6 +1,7 @@
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { del, put } from "@vercel/blob";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 export const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
@@ -19,6 +20,10 @@ export type AttachmentInput = {
   fileName: string;
   fileType: string;
 };
+
+function isBlobStorageEnabled() {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
 
 function sanitizeFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-").toLowerCase();
@@ -68,15 +73,29 @@ async function persistAttachment(input: {
   buffer: Buffer;
   fileName: string;
 }) {
-  await mkdir(UPLOAD_DIR, { recursive: true });
-
   const preferredName = sanitizeFileName(input.fileName);
   const extension = preferredName.includes(".")
     ? preferredName.split(".").pop() ?? extensionFromMimeType(input.mimeType)
     : extensionFromMimeType(input.mimeType);
   const fileName = `${randomUUID()}.${extension}`;
-  const filePath = path.join(UPLOAD_DIR, fileName);
 
+  if (isBlobStorageEnabled()) {
+    const blob = await put(`attachments/${fileName}`, input.buffer, {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: input.mimeType,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
+
+    return {
+      fileUrl: blob.url,
+      fileName: preferredName || `${randomUUID()}.${extension}`,
+      fileType: input.mimeType,
+    };
+  }
+
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  const filePath = path.join(UPLOAD_DIR, fileName);
   await writeFile(filePath, input.buffer);
 
   return {
@@ -113,6 +132,19 @@ export async function storeAttachmentFile(file: File) {
 }
 
 export async function removeStoredFile(fileUrl: string) {
+  if (fileUrl.startsWith("http://") || fileUrl.startsWith("https://")) {
+    if (!isBlobStorageEnabled()) {
+      return;
+    }
+
+    try {
+      await del(fileUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
+    } catch {
+      // Ignore missing files to keep delete idempotent.
+    }
+    return;
+  }
+
   if (!fileUrl.startsWith("/uploads/")) {
     return;
   }

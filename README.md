@@ -4,8 +4,8 @@ Aplikasi web checklist task untuk PT wcf dengan 3 role: `pt_wcf`, `karyawan`, da
 
 Catatan implementasi:
 - UI dan route sudah siap dipakai untuk demo end-to-end.
-- Backend saat ini memakai repository in-memory dengan dummy data agar aplikasi langsung berjalan tanpa setup database.
-- Schema Prisma PostgreSQL sudah disiapkan agar mudah dipindahkan ke database nyata.
+- Backend memakai Prisma + PostgreSQL.
+- Attachment disimpan ke filesystem lokal saat development, dan bisa memakai Vercel Blob saat deploy di Vercel.
 
 ## 1. Struktur Folder Project
 
@@ -118,7 +118,8 @@ Backend utama:
 - [app/api/tasks/[taskId]/complete/route.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/api/tasks/[taskId]/complete/route.ts:1)
 - [app/api/tasks/[taskId]/review/route.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/api/tasks/[taskId]/review/route.ts:1)
 - [app/api/auth/login/route.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/app/api/auth/login/route.ts:1)
-- [lib/mock-db.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/mock-db.ts:1)
+- [lib/data.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/data.ts:1)
+- [lib/prisma.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/prisma.ts:1)
 - [lib/auth.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/auth.ts:1)
 
 ## 7. Dummy Data
@@ -128,7 +129,7 @@ Dummy akun:
 - Karyawan: `rina@wcf.co.id` / `karyawan123`
 - Pengawas: `mira@wcf.co.id` / `pengawas123`
 
-Dummy task, attachment, activity log, dan notification ada di [lib/mock-db.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/mock-db.ts:1).
+Data awal akan dibuat otomatis saat login pertama melalui proses inisialisasi di [lib/data.ts](/Users/annafifakhruddin/Documents/wcf/wcftuntas/lib/data.ts:660).
 
 ## 8. Panduan Menjalankan Project
 
@@ -148,10 +149,25 @@ npm run dev
 
 4. Login dengan salah satu dummy account di atas.
 
-5. Jika ingin memakai PostgreSQL sungguhan:
-- buat `.env` dan isi `DATABASE_URL`
-- jalankan `npx prisma migrate dev`
-- ganti repository in-memory di `lib/mock-db.ts` dengan query Prisma service
+5. Isi `.env` minimal dengan:
+- `DATABASE_URL`
+- `SHADOW_DATABASE_URL` untuk migration lokal Prisma
+- `AUTH_SECRET`
+
+6. Jalankan migration:
+
+```bash
+npx prisma migrate dev
+```
+
+## Deploy ke Vercel
+
+Deploy ke Vercel bisa dipakai untuk aplikasi ini, dengan syarat:
+- `DATABASE_URL` harus mengarah ke PostgreSQL publik, bukan host Docker seperti `db:5432`
+- `AUTH_SECRET` wajib diisi di Project Settings Vercel
+- `BLOB_READ_WRITE_TOKEN` wajib diisi jika ingin attachment tetap jalan di production
+
+Langkah detail ada di [DEPLOY-VERCEL.md](/Users/annafifakhruddin/Documents/wcf/wcftuntas/DEPLOY-VERCEL.md:1).
 
 ## Validasi Bisnis yang Sudah Diimplementasikan
 
