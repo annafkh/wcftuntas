@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { ChangePasswordForm } from "@/components/change-password-form";
 import { getSession } from "@/lib/auth";
 import { getDefaultRoute } from "@/lib/rbac";
@@ -16,10 +17,15 @@ export default async function ChangePasswordPage() {
   }
 
   return (
-        <main className="relative flex min-h-screen items-center overflow-hidden px-4 py-10 text-slate-900">
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/bg-wcf.png')" }}
+    <main className="relative flex min-h-screen items-center overflow-hidden px-4 py-10 text-slate-900">
+      <Image
+        src="/bg-wcf-hero.webp"
+        alt=""
+        fill
+        priority
+        quality={72}
+        sizes="100vw"
+        className="absolute inset-0 object-cover"
       />
       <div className="absolute inset-0 bg-slate-950/35" />
 

@@ -15,9 +15,14 @@ export default async function LoginPage() {
 
   return (
     <main className="relative flex min-h-screen items-center overflow-hidden px-4 py-10 text-slate-900">
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/bg-wcf.png')" }}
+      <Image
+        src="/bg-wcf-hero.webp"
+        alt=""
+        fill
+        priority
+        quality={72}
+        sizes="100vw"
+        className="absolute inset-0 object-cover"
       />
       <div className="absolute inset-0 bg-slate-950/35" />
 
@@ -37,7 +42,7 @@ export default async function LoginPage() {
             <div className="flex items-center self-start sm:ml-4">
               <div className="overflow-hidden">
                 <Image
-                  src="/PT WCF.png"
+                  src="/pt-wcf-logo.webp"
                   alt="Logo PT WCF"
                   width={100}
                   height={100}

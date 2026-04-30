@@ -1,4 +1,4 @@
-import { TaskCalendar } from "@/components/task-calendar";
+import { LazyTaskCalendar } from "@/components/lazy-task-calendar";
 import { getSession } from "@/lib/auth";
 import { getShiftCalendarEvents } from "@/lib/data";
 
@@ -24,7 +24,7 @@ export default async function CalendarPage() {
         </p>
       </section>
 
-      <TaskCalendar events={events} session={session} />
+      <LazyTaskCalendar events={events} session={session} />
     </div>
   );
 }

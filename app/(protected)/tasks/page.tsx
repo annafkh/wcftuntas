@@ -1,4 +1,4 @@
-import { ShiftScheduleBoard } from "@/components/shift-schedule-board";
+import { LazyShiftScheduleBoard } from "@/components/lazy-shift-schedule-board";
 import { getSession } from "@/lib/auth";
 import { getUsers, listShiftSchedules, listTaskPackages, listTaskTemplates } from "@/lib/data";
 import { SHIFT_LABELS } from "@/lib/types";
@@ -76,7 +76,7 @@ export default async function TasksPage({
         </form>
       </section>
 
-      <ShiftScheduleBoard
+      <LazyShiftScheduleBoard
         initialSchedules={schedules}
         employees={employees}
         taskTemplates={taskTemplates}
