@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
-import { findUserById } from "@/lib/data";
 import { getDefaultRoute } from "@/lib/rbac";
 
 const protectedPrefixes = ["/dashboard", "/tasks", "/calendar", "/approval", "/history", "/users", "/partners"];
@@ -23,29 +22,27 @@ export async function proxy(request: NextRequest) {
   }
 
   const session = await verifySessionToken(token);
+  if (!session) {
+    if (isProtected) {
+      const response = NextResponse.redirect(new URL("/login", request.url));
+      response.cookies.delete(AUTH_COOKIE_NAME);
+      return response;
+    }
 
-  if (!session && isProtected) {
-    const response = NextResponse.redirect(new URL("/login", request.url));
+    const response = NextResponse.next();
     response.cookies.delete(AUTH_COOKIE_NAME);
     return response;
   }
 
-  const user = session ? await findUserById(session.userId) : null;
-  const mustChangePassword = Boolean(session?.mustChangePassword);
-
-  if (!user && isProtected) {
-    const response = NextResponse.redirect(new URL("/login", request.url));
-    response.cookies.delete(AUTH_COOKIE_NAME);
-    return response;
-  }
+  const mustChangePassword = Boolean(session.mustChangePassword);
 
   if (mustChangePassword && pathname !== passwordResetPath) {
     return NextResponse.redirect(new URL(passwordResetPath, request.url));
   }
 
-  if (session && pathname === "/login") {
+  if (pathname === "/login") {
     return NextResponse.redirect(
-      new URL(mustChangePassword ? passwordResetPath : getDefaultRoute(user?.role ?? session.role), request.url),
+      new URL(mustChangePassword ? passwordResetPath : getDefaultRoute(session.role), request.url),
     );
   }
 
