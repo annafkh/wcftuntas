@@ -438,8 +438,8 @@ function buildTaskWhere(session: SessionPayload, filters: TaskFilters = {}): Pri
       filters.search
         ? {
             OR: [
-              { title: { contains: filters.search, mode: "insensitive" } },
-              { description: { contains: filters.search, mode: "insensitive" } },
+              { title: { contains: filters.search } },
+              { description: { contains: filters.search } },
             ],
           }
         : {},
@@ -1175,10 +1175,10 @@ export async function listUsers(filters: UserFilters = {}) {
       ...(filters.search
         ? {
             OR: [
-              { name: { contains: filters.search, mode: "insensitive" } },
-              { username: { contains: filters.search, mode: "insensitive" } },
-              { email: { contains: filters.search, mode: "insensitive" } },
-              { department: { contains: filters.search, mode: "insensitive" } },
+              { name: { contains: filters.search } },
+              { username: { contains: filters.search } },
+              { email: { contains: filters.search } },
+              { department: { contains: filters.search } },
             ],
           }
         : {}),
@@ -1203,10 +1203,10 @@ export async function listUsersPaginated(
     ...(filters.search
       ? {
           OR: [
-            { name: { contains: filters.search, mode: "insensitive" as const } },
-            { username: { contains: filters.search, mode: "insensitive" as const } },
-            { email: { contains: filters.search, mode: "insensitive" as const } },
-            { department: { contains: filters.search, mode: "insensitive" as const } },
+            { name: { contains: filters.search } },
+            { username: { contains: filters.search } },
+            { email: { contains: filters.search } },
+            { department: { contains: filters.search } },
           ],
         }
       : {}),
@@ -2729,7 +2729,7 @@ export function getBlueprint() {
       "React 19",
       "TypeScript",
       "Tailwind CSS 4",
-      "Prisma + PostgreSQL",
+      "Prisma + MySQL",
       "JWT auth via secure HTTP-only cookie",
       "FullCalendar",
       "Zod validation",

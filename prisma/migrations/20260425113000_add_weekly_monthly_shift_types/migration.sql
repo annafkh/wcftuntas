@@ -1,2 +1,0 @@
-ALTER TYPE "ShiftType" ADD VALUE IF NOT EXISTS 'mingguan';
-ALTER TYPE "ShiftType" ADD VALUE IF NOT EXISTS 'bulanan';

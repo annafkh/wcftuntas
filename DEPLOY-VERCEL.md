@@ -2,21 +2,21 @@
 
 Project ini bisa di-deploy ke Vercel, tetapi ada 2 penyesuaian penting dari setup lokal:
 
-- `DATABASE_URL` tidak boleh memakai host Docker internal seperti `postgres@db:5432/wcftuntas`
+- `DATABASE_URL` tidak boleh memakai host lokal atau private yang hanya hidup di mesin development
 - attachment production tidak boleh mengandalkan `public/uploads`, jadi gunakan Vercel Blob
 
-### 1. Siapkan PostgreSQL publik
+### 1. Siapkan MySQL publik
 
 Pilih salah satu:
-- Vercel Postgres
-- Neon
-- Supabase
-- Railway Postgres
+- PlanetScale
+- Railway MySQL
+- Aiven MySQL
+- MySQL server Anda sendiri
 
 Isi environment variable berikut di Vercel:
 
 ```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DB_NAME?sslmode=require
+DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/wcftuntas
 AUTH_SECRET=ganti-dengan-random-secret-yang-panjang
 SEED_ADMIN_EMAIL=admin@wcftuntas.online
 SEED_ADMIN_USERNAME=admin
@@ -54,15 +54,10 @@ Build settings default sudah cukup:
 
 Copy dari [.env.vercel.example](/Users/annafifakhruddin/Documents/wcf/wcftuntas/.env.vercel.example:1), lalu isi nilai sebenarnya di dashboard Vercel.
 
-Untuk Supabase:
-- `DATABASE_URL` gunakan endpoint pooler port `6543`
-- `DIRECT_URL` gunakan endpoint direct port `5432`
-
 Contoh:
 
 ```env
-DATABASE_URL=postgresql://postgres.PROJECT_REF:PASSWORD@AWS-REGION.pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require
-DIRECT_URL=postgresql://postgres.PROJECT_REF:PASSWORD@AWS-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/wcftuntas
 AUTH_SECRET=secret-random-panjang
 BLOB_READ_WRITE_TOKEN=...
 ```
@@ -84,10 +79,16 @@ Pastikan `DATABASE_URL` lokal diarahkan ke database production saat menjalankan 
 Value seperti ini tidak akan jalan di Vercel:
 
 ```env
-SHADOW_DATABASE_URL=postgresql://postgres@db:5432/wcftuntas
+DATABASE_URL=mysql://root:password@127.0.0.1:3306/wcftuntas
 ```
 
-Host `db` hanya valid di jaringan Docker lokal. Untuk Vercel, pakai hostname database publik dari provider PostgreSQL Anda.
+Gunakan hostname database publik yang memang bisa diakses dari Vercel.
+
+### 5a. Catatan setelah refactor dari PostgreSQL
+
+- Folder `prisma/migrations` sekarang diasumsikan sebagai baseline MySQL baru.
+- Jika Anda punya database PostgreSQL lama yang berisi data penting, migrasikan datanya secara terpisah sebelum cut-over.
+- Jangan jalankan migration MySQL ini ke database PostgreSQL lama.
 
 ### 6. Verifikasi setelah deploy
 

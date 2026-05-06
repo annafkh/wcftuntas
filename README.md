@@ -4,7 +4,7 @@ Aplikasi web checklist task untuk PT wcf dengan 3 role: `pt_wcf`, `karyawan`, da
 
 Catatan implementasi:
 - UI dan route sudah siap dipakai untuk demo end-to-end.
-- Backend memakai Prisma + PostgreSQL.
+- Backend memakai Prisma + MySQL.
 - Attachment disimpan ke filesystem lokal saat development, dan bisa memakai Vercel Blob saat deploy di Vercel.
 
 ## 1. Struktur Folder Project
@@ -53,7 +53,7 @@ proxy.ts
 - Styling: Tailwind CSS 4
 - Backend: Next.js Route Handlers
 - Auth: JWT + HTTP-only cookie
-- Database target: PostgreSQL + Prisma
+- Database target: MySQL + Prisma
 - Validation: Zod
 - Calendar: FullCalendar
 
@@ -163,11 +163,12 @@ npx prisma migrate dev
 ## Deploy ke Vercel
 
 Deploy ke Vercel bisa dipakai untuk aplikasi ini, dengan syarat:
-- `DATABASE_URL` harus mengarah ke PostgreSQL publik, bukan host Docker seperti `db:5432`
+- `DATABASE_URL` harus mengarah ke MySQL publik, bukan host lokal seperti `127.0.0.1` atau socket lokal
 - `AUTH_SECRET` wajib diisi di Project Settings Vercel
 - `BLOB_READ_WRITE_TOKEN` wajib diisi jika ingin attachment tetap jalan di production
 
 Langkah detail ada di [DEPLOY-VERCEL.md](/Users/annafifakhruddin/Documents/wcf/wcftuntas/DEPLOY-VERCEL.md:1).
+Jika target Anda Hostinger Business, lihat juga [DEPLOY-HOSTINGER.md](/Users/annafifakhruddin/Documents/wcf/wcftuntas/DEPLOY-HOSTINGER.md:1).
 
 ## Validasi Bisnis yang Sudah Diimplementasikan
 

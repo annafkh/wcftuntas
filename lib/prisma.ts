@@ -12,15 +12,12 @@ function resolveDatabaseUrl() {
     if (parsed.DATABASE_URL) {
       return parsed.DATABASE_URL;
     }
-    if (parsed.DIRECT_URL) {
-      return parsed.DIRECT_URL;
-    }
   } catch {
     // Fallback to process.env when .env is unavailable.
   }
 
   loadDotenv({ path: envPath, override: false });
-  return process.env.DATABASE_URL ?? process.env.DIRECT_URL;
+  return process.env.DATABASE_URL;
 }
 
 const databaseUrl = resolveDatabaseUrl();
