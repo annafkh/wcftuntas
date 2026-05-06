@@ -1,6 +1,10 @@
 import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
 
+const fallbackDatabaseUrl = "mysql://placeholder:placeholder@127.0.0.1:3306/wcftuntas";
+const databaseUrl = process.env.DATABASE_URL ?? fallbackDatabaseUrl;
+const shadowDatabaseUrl = process.env.SHADOW_DATABASE_URL;
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -8,7 +12,7 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: env("DATABASE_URL"),
-    shadowDatabaseUrl: env("SHADOW_DATABASE_URL"),
+    url: databaseUrl,
+    ...(shadowDatabaseUrl ? { shadowDatabaseUrl } : {}),
   },
 });
