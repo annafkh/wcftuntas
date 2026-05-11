@@ -21,7 +21,9 @@ export function LoginForm({
           name="identifier"
           type="text"
           required
+          autoComplete="username"
           placeholder="Masukan Username atau Email"
+          suppressHydrationWarning
         />
       </Field>
 
@@ -31,8 +33,10 @@ export function LoginForm({
             name="password"
             type={showPassword ? "text" : "password"}
             required
+            autoComplete="current-password"
             placeholder="Masukan Password"
             className="pr-12"
+            suppressHydrationWarning
           />
           <button
             type="button"

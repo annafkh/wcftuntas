@@ -97,7 +97,7 @@ export function TaskCalendar({
   const [isMobile, setIsMobile] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
-  const [filesByTaskId, setFilesByTaskId] = useState<Record<string, File | null>>({});
+  const [filesByTaskId, setFilesByTaskId] = useState<Record<string, File[]>>({});
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<{
     fileUrl: string;
@@ -122,21 +122,46 @@ export function TaskCalendar({
     setSelectedScheduleId(null);
   }
 
+  function handleTaskFilesChange(taskId: string, fileList: FileList | null, input: HTMLInputElement) {
+    const nextFiles = Array.from(fileList ?? []);
+    const oversizedFile = nextFiles.find((file) => file.size > MAX_CLIENT_ATTACHMENT_SIZE);
+
+    if (oversizedFile) {
+      showToast({
+        title: "Ukuran File Terlalu Besar",
+        description: `File "${oversizedFile.name}" melebihi batas 5 MB.`,
+        variant: "error",
+      });
+      input.value = "";
+      setFilesByTaskId((current) => ({
+        ...current,
+        [taskId]: [],
+      }));
+      return;
+    }
+
+    setFilesByTaskId((current) => ({
+      ...current,
+      [taskId]: nextFiles,
+    }));
+  }
+
   async function handleAttachmentUpload(taskId: string) {
-    const file = filesByTaskId[taskId];
-    if (!file) {
+    const files = filesByTaskId[taskId] ?? [];
+    if (files.length === 0) {
       showToast({
         title: "Upload Belum Bisa Diproses",
-        description: "Pilih file PNG, JPG, atau JPEG terlebih dahulu.",
+        description: "Pilih minimal satu file PNG, JPG, atau JPEG terlebih dahulu.",
         variant: "error",
       });
       return;
     }
 
-    if (file.size > MAX_CLIENT_ATTACHMENT_SIZE) {
+    const oversizedFile = files.find((file) => file.size > MAX_CLIENT_ATTACHMENT_SIZE);
+    if (oversizedFile) {
       showToast({
         title: "Ukuran File Terlalu Besar",
-        description: `File "${file.name}" melebihi batas 5 MB.`,
+        description: `File "${oversizedFile.name}" melebihi batas 5 MB.`,
         variant: "error",
       });
       return;
@@ -144,7 +169,9 @@ export function TaskCalendar({
 
     setUploadingTaskId(taskId);
     const formData = new FormData();
-    formData.append("attachments", file);
+    files.forEach((file) => {
+      formData.append("attachments", file);
+    });
     const response = await fetch(`/api/tasks/${taskId}/complete`, {
       method: "POST",
       body: formData,
@@ -162,10 +189,10 @@ export function TaskCalendar({
       return;
     }
 
-    setFilesByTaskId((current) => ({ ...current, [taskId]: null }));
+    setFilesByTaskId((current) => ({ ...current, [taskId]: [] }));
     showToast({
       title: "Upload Berhasil",
-      description: "Attachment telah diunggah dan checklist tugas diperbarui.",
+      description: `${files.length} attachment telah diunggah dan checklist tugas diperbarui.`,
       variant: "success",
     });
     router.refresh();
@@ -290,6 +317,8 @@ export function TaskCalendar({
   }
 
   function renderAttachmentContent(task: ShiftCalendarEvent["extendedProps"]["tasks"][number]) {
+    const selectedFiles = filesByTaskId[task.id] ?? [];
+
     if (task.attachmentCount > 0) {
       return (
         <div className="space-y-2">
@@ -316,42 +345,25 @@ export function TaskCalendar({
             <div className="space-y-2 pt-1">
               <input
                 type="file"
+                multiple
                 accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] ?? null;
-
-                  if (nextFile && nextFile.size > MAX_CLIENT_ATTACHMENT_SIZE) {
-                    showToast({
-                      title: "Ukuran File Terlalu Besar",
-                      description: `File "${nextFile.name}" melebihi batas 5 MB.`,
-                      variant: "error",
-                    });
-                    event.target.value = "";
-                    setFilesByTaskId((current) => ({
-                      ...current,
-                      [task.id]: null,
-                    }));
-                    return;
-                  }
-
-                  setFilesByTaskId((current) => ({
-                    ...current,
-                    [task.id]: nextFile,
-                  }));
-                }}
+                onChange={(event) => handleTaskFilesChange(task.id, event.target.files, event.target)}
                 className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs sm:max-w-56"
               />
-              {filesByTaskId[task.id] ? (
-                <p className="text-xs text-slate-500">{filesByTaskId[task.id]?.name}</p>
+              {selectedFiles.length > 0 ? (
+                <p className="text-xs text-slate-500">
+                  {selectedFiles.length} file dipilih: {selectedFiles.map((file) => file.name).join(", ")}
+                </p>
               ) : null}
               <button
                 type="button"
                 onClick={() => handleAttachmentUpload(task.id)}
-                disabled={uploadingTaskId === task.id || !filesByTaskId[task.id]}
+                disabled={uploadingTaskId === task.id || selectedFiles.length === 0}
                 className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
                 {uploadingTaskId === task.id ? "Mengunggah..." : "Tambah attachment"}
               </button>
+              <p className="text-[11px] text-slate-400">Bisa pilih beberapa file sekaligus. Maksimal 5 MB per file.</p>
             </div>
           ) : null}
         </div>
@@ -363,42 +375,25 @@ export function TaskCalendar({
         <div className="space-y-2">
           <input
             type="file"
+            multiple
             accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-            onChange={(event) => {
-              const nextFile = event.target.files?.[0] ?? null;
-
-              if (nextFile && nextFile.size > MAX_CLIENT_ATTACHMENT_SIZE) {
-                showToast({
-                  title: "Ukuran File Terlalu Besar",
-                  description: `File "${nextFile.name}" melebihi batas 5 MB.`,
-                  variant: "error",
-                });
-                event.target.value = "";
-                setFilesByTaskId((current) => ({
-                  ...current,
-                  [task.id]: null,
-                }));
-                return;
-              }
-
-              setFilesByTaskId((current) => ({
-                ...current,
-                [task.id]: nextFile,
-              }));
-            }}
+            onChange={(event) => handleTaskFilesChange(task.id, event.target.files, event.target)}
             className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs sm:max-w-56"
           />
-          {filesByTaskId[task.id] ? (
-            <p className="text-xs text-slate-500">{filesByTaskId[task.id]?.name}</p>
+          {selectedFiles.length > 0 ? (
+            <p className="text-xs text-slate-500">
+              {selectedFiles.length} file dipilih: {selectedFiles.map((file) => file.name).join(", ")}
+            </p>
           ) : null}
           <button
             type="button"
             onClick={() => handleAttachmentUpload(task.id)}
-            disabled={uploadingTaskId === task.id || !filesByTaskId[task.id]}
+            disabled={uploadingTaskId === task.id || selectedFiles.length === 0}
             className="inline-flex items-center justify-center rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
           >
             {uploadingTaskId === task.id ? "Mengunggah..." : "Upload"}
           </button>
+          <p className="text-[11px] text-slate-400">Bisa pilih beberapa file sekaligus. Maksimal 5 MB per file.</p>
         </div>
       );
     }
@@ -543,6 +538,9 @@ export function TaskCalendar({
       ) : null}
 
       <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white p-2.5 shadow-[0_14px_36px_rgba(15,23,42,0.06)] sm:p-4">
+        <div className="mb-3 rounded-2xl border border-sky-100 bg-sky-50 px-3.5 py-3 text-sm text-sky-800">
+          Klik tanggal atau event pada kalender untuk melihat detail jadwal dan tugas.
+        </div>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, interactionPlugin]}
@@ -563,6 +561,12 @@ export function TaskCalendar({
           events={events}
           height="auto"
           dayMaxEventRows={isMobile ? 2 : 3}
+          dayCellClassNames={() =>
+            "cursor-pointer transition hover:bg-sky-50"
+          }
+          eventClassNames={() =>
+            "cursor-pointer transition hover:brightness-95"
+          }
           dateClick={(info) => {
             setSelectedDate(info.dateStr);
             setSelectedScheduleId(null);

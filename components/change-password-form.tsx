@@ -55,6 +55,8 @@ export function ChangePasswordForm() {
             type={showPassword ? "text" : "password"}
             required
             minLength={8}
+            autoComplete="new-password"
+            suppressHydrationWarning
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-12 text-sm text-slate-900 outline-none transition focus:border-blue-600"
           />
           <button
@@ -76,6 +78,8 @@ export function ChangePasswordForm() {
             type={showConfirmPassword ? "text" : "password"}
             required
             minLength={8}
+            autoComplete="new-password"
+            suppressHydrationWarning
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-12 text-sm text-slate-900 outline-none transition focus:border-blue-600"
           />
           <button
